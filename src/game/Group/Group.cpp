@@ -1271,11 +1271,13 @@ static void GetDataForXPAtKill_helper(Player* player, Unit const* victim, uint32
 {
     sum_level += player->GetLevel();
     if (!member_with_max_level || member_with_max_level->GetLevel() < player->GetLevel())
+        // we are getting here the player of the group with the highest level 
         member_with_max_level = player;
 
     uint32 gray_level = MaNGOS::XP::GetGrayLevel(player->GetLevel());
     if (victim->GetLevel() > gray_level && (!not_gray_member_with_max_level
         || not_gray_member_with_max_level->GetLevel() < player->GetLevel()))
+        // we are getting here the highest level player in that group for who this mop is not gray
         not_gray_member_with_max_level = player;
 }
 
@@ -2311,7 +2313,14 @@ static void RewardGroupAtKill_helper(Player* pGroupGuy, Unit* pVictim, uint32 co
     // xp and reputation only in !PvP case
     if (!PvP)
     {
+        // if no group then rate = 1
+        // if two group then rate = group_rate * (player-lvl / (player-lvl_1 + player-lvl_2))
         float rate = group_rate * float(pGroupGuy->GetLevel()) / sum_level;
+
+        if (member_with_max_level->GetLevel() > pGroupGuy->GetLevel()) {
+            // if player is not highest in group, then give normal xp
+            rate = 1
+        }
 
         // if is in dungeon then all receive full reputation at kill
         // rewarded any alive/dead/near_corpse group member
@@ -2320,6 +2329,7 @@ static void RewardGroupAtKill_helper(Player* pGroupGuy, Unit* pVictim, uint32 co
         // XP updated only for alive group member
         if (pGroupGuy->IsAlive() && not_gray_member_with_max_level)
         {
+            // HERE we give out XP
             uint32 itr_xp = (member_with_max_level == not_gray_member_with_max_level) ? uint32(xp * rate) : uint32((xp * rate / 2) + 1);
             if (pGroupGuy->GetLevel() <= not_gray_member_with_max_level->GetLevel())
                 pGroupGuy->GiveXP(itr_xp, pVictim);
@@ -2359,8 +2369,12 @@ void Group::RewardGroupAtKill(Unit* pVictim, Player* pPlayerTap)
 
     GetDataForXPAtKill(pVictim, count, sum_level, member_with_max_level, not_gray_member_with_max_level, pPlayerTap);
 
+
+    // member_with_max_level should always be set at this point
     if (member_with_max_level)
     {
+
+        // if not_gray_member_with_max_level = nullptr, then the mop is gray for all players in that group and we do not want to give XP
         // not get Xp in PvP or no not gray players in group
         xp = (PvP || !not_gray_member_with_max_level) ? 0 : MaNGOS::XP::Gain(not_gray_member_with_max_level, static_cast<Creature*>(pVictim));
 
